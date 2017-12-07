@@ -1,13 +1,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <iostream>
 #include <mkl.h>
+#include <omp.h>
 
-void print_vector(double *x, int len, char *name = "vector")
+template<typename Float>
+void print_vector(Float *x, int len, char *name = "vector")
 {
 	printf("%s:", name);
 	for (int i = 0; i < len; ++i) {
-		printf(" %f", x[i]);
+		//printf(" %.20Lf", x[i]);
+		std::cout << " " << x[i];
 	}
 	putchar('\n');
 }
@@ -95,28 +99,78 @@ void test()
 
 void intput(int n, long double *x, long double *y)
 {
+	srand(time(0));
+	for (int i = 0; i < n; ++i) {
+		x[i] = (long double) rand()/RAND_MAX;
+		y[i] = (long double) rand()/RAND_MAX;
+	}
 }
 
-void single_dot(int n, long double *x, long double *y)
+long double kahan_dot(int n, long double *x, long double *y)
 {
-}
+	long double sum = 0.0;
+	long double c = 0.0;
 
-void double_dot(int n, long double *x, long double *y)
-{
+	for (int i = 0; i < n; ++i) {
+		long double r = x[i] * y[i] - c;
+		long double t = sum + r;
+		c = (t - sum) - r;
+		sum = t;
+	}
+
+	return sum;
 }
 
 int main(int argc, char *argv[])
 {
-	test();
-	long double *x = (long double *) malloc(sizeof(long double) * len);
-	long double *y = (long double *) malloc(sizeof(long double) * len);
+	//test();
+	int n = 10;
+	int count = 10;
+	//long double abs_errors[7];
+	//long double rel_errors[7];
+	//long double run_times[7];
+	//memset(abs_errors, 0, sizeof(abs_errors));
+	//memset(rel_errors, 0, sizeof(rel_errors));
+	//memset(run_times, 0, sizeof(run_times));
+	for (int i = 0; i < 7; ++i) {
+		n *= 10;
+		long double *x = (long double *) malloc(sizeof(long double) * n);
+		long double *y = (long double *) malloc(sizeof(long double) * n);
+		long double abs_error = 0.0;
+		long double rel_error = 0.0;
+		double run_time = 0.0;
 
-	// Input vector x and vector y.
+		// Input vector x and vector y.
+		intput(n, x, y);
 
-	// Caldulate
+		for (int k = 0; k < count; ++k) { // times of experiments
+			// Calculate the base value
+			long double r = kahan_dot(n, x, y);
 
-	free(x);
-	free(y);
+			// Calculate the output value
+			double start_time = omp_get_wtime();
+			double r_bar = idot(n, x, y);
+			run_time += omp_get_wtime() - start_time;
+
+			// Absolute error
+			abs_error += r > r_bar ? r - r_bar : r_bar - r;
+
+			// Relative error
+			rel_error += abs_error/r;
+		}
+		abs_error /= count;
+		rel_error /= count;
+		run_time /= count;
+
+		//print_vector(x, n, "x");
+		//print_vector(y, n, "y");
+		//printf("r: %.20Lf, r_bar: %.20f\n", r, r_bar);
+		//printf("n: %d, abs_error: %.20Lf, rel_error: %.20Lf, time: %f\n", n, abs_error, rel_error);
+		printf("%d %.20Lf %.20Lf %f\n", n, abs_error, rel_error, run_time);
+
+		free(x);
+		free(y);
+	}
 
 	return 0;
 }

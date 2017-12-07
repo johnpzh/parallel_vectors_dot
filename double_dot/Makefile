@@ -1,5 +1,5 @@
 CC = icpc
-CPPFLAGS = -g -Wall -Wextra -mkl
+CPPFLAGS = -g -Wall -Wextra -mkl -qopenmp
 
 .PHONY: all clean
 

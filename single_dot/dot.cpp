@@ -101,10 +101,6 @@ void single_dot(int n, long double *x, long double *y)
 {
 }
 
-void double_dot(int n, long double *x, long double *y)
-{
-}
-
 int main(int argc, char *argv[])
 {
 	test();
