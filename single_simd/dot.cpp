@@ -4,6 +4,7 @@
 #include <iostream>
 #include <mkl.h>
 #include <omp.h>
+#include "immintrin.h"
 
 int NUM_THREADS;
 
@@ -48,17 +49,42 @@ Float iblas_dot(int n, Float *x, Float *y)
 	return ddot;
 }
 
-template<typename Float>
-Float idot(int n, Float *x, Float *y)
+//template<typename Float>
+//Float idot(int n, Float *x, Float *y)
+//{
+//	Float dot = 0.0;
+//#pragma omp parallel for reduction(+: dot)
+//	for (int i = 0; i < n; ++i) {
+//		dot += x[i] * y[i];
+//	}
+//
+//	return dot;
+//}
+
+float idot(int n, float *x, float *y)
 {
-	Float dot = 0.0;
-#pragma omp parallel for reduction(+: dot)
-	for (int i = 0; i < n; ++i) {
-		dot += x[i] * y[i];
+	float sum = 0.0;
+	int num_packed_float = 16; // number of float numbers in SIMD a register
+	int remainder = n % num_packed_float;
+	int bound = n - remainder;
+
+	for (int i = 0; i < bound; i += num_packed_float) {
+		__m512 x_v = _mm512_load_ps(x + i);
+		__m512 y_v = _mm512_load_ps(y + i);
+		__m512 t_v = _mm512_mul_ps(x_v, y_v);
+		sum += _mm512_reduce_add_ps(t_v);
 	}
 
-	return dot;
+	// Add the remainder
+	unsigned short t_m = (unsigned short) 0xFFFF >> (num_packed_float - remainder);
+	__mmask16 r_m = (__mmask16) t_m;
+	__m512 x_v = _mm512_mask_load_ps(_mm512_undefined_ps(), r_m, x + bound);
+	__m512 y_v = _mm512_mask_load_ps(_mm512_undefined_ps(), r_m, y + bound);
+	__m512 t_v = _mm512_mask_mul_ps(_mm512_undefined_ps(), r_m, x_v, y_v);
+	sum += _mm512_mask_reduce_add_ps(r_m, t_v);
+	return sum;
 }
+
 void intput(int n, long double *x, long double *y)
 {
 	srand(time(0));
@@ -84,56 +110,64 @@ long double kahan_dot(int n, long double *x, long double *y)
 	return sum;
 }
 
+void test()
+{
+	float x[5] __attribute__((aligned(64))) = {0, 1, 1, 1, 1};
+	float y[5] __attribute__((aligned(64))) = {1, 1, 1, 1, 1};
+	printf("result: %f\n", idot(5, x, y));
+}
+
 int main(int argc, char *argv[])
 {
 	//test();
-	int count = 2;
+	int n = 10;
+	int count = 10;
 
 	NUM_THREADS = 64;
 	omp_set_num_threads(NUM_THREADS);
-		int n = 10;
 	for (int i = 0; i < 7; ++i) {
 		n *= 10;
-		long double abs_error = 0.0;
-		long double rel_error = 0.0;
-		double run_time = 0.0;
-		//for (int k = 0; k < count; ++k) {
 		long double *x = (long double *) malloc(sizeof(long double) * n);
 		long double *y = (long double *) malloc(sizeof(long double) * n);
+		//long double abs_error = 0.0;
+		//long double rel_error = 0.0;
+		//double run_time = 0.0;
 
 		// Input vector x and vector y.
+		//double input_time = omp_get_wtime();
 		intput(n, x, y);
-		double *x_double = (double *) malloc(n * sizeof(double));
-		double *y_double = (double *) malloc(n * sizeof(double));
+		float *x_single = (float *) _mm_malloc(n * sizeof(float), 64);
+		float *y_single = (float *) _mm_malloc(n * sizeof(float), 64);
 #pragma omp parallel for num_threads(64)
 		for (int i = 0; i < n; ++i) {
-			x_double[i] = x[i];
-			y_double[i] = y[i];
+			x_single[i] = x[i];
+			y_single[i] = y[i];
 		}
-
 		// Calculate the base value
 		long double r = kahan_dot(n, x, y);
 
-		// Calculate the output value
+		//for (int k = 0; k < count; ++k) { // times of experiments
+			// Calculate the output value
 		double start_time = omp_get_wtime();
-		double r_bar = idot(n, x_double, y_double);
-		run_time += omp_get_wtime() - start_time;
+		float r_bar = idot(n, x_single, y_single);
+		double run_time = omp_get_wtime() - start_time;
 
 		// Absolute error
-		abs_error += r > r_bar ? r - r_bar : r_bar - r;
+		long double abs_error = r > r_bar ? r - r_bar : r_bar - r;
 
 		// Relative error
-		rel_error += abs_error/r;
-
-		printf("%d %.20Lf %.20Lf %f\n", n, abs_error, rel_error, run_time);
-		free(x_double);
-		free(y_double);
-		free(x);
-		free(y);
+		long double rel_error = abs_error/r;
 		//}
-		//run_time /= count;
 		//abs_error /= count;
 		//rel_error /= count;
+		//run_time /= count;
+
+		printf("%d %.20Lf %.20Lf %f\n", n, abs_error, rel_error, run_time);
+
+		_mm_free(x_single);
+		_mm_free(y_single);
+		free(x);
+		free(y);
 	}
 
 	return 0;

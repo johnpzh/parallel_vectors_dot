@@ -1,13 +1,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <iostream>
 #include <mkl.h>
+#include <omp.h>
 
-void print_vector(double *x, int len, char *name = "vector")
+template<typename Float>
+void print_vector(Float *x, int len, char *name = "vector")
 {
 	printf("%s:", name);
 	for (int i = 0; i < len; ++i) {
-		printf(" %f", x[i]);
+		//printf(" %.20Lf", x[i]);
+		std::cout << " " << x[i];
 	}
 	putchar('\n');
 }
@@ -52,67 +56,74 @@ Float idot(int n, Float *x, Float *y)
 
 	return dot;
 }
-void test()
-{
-	int len = 10;
-	double *x = (double *) malloc(sizeof(double) * len);
-	double *y = (double *) malloc(sizeof(double) * len);
-
-	srand(time(0));
-	for (int i = 0; i < len; ++i) {
-		x[i] = (double) rand()/RAND_MAX;
-		y[i] = (double) rand()/RAND_MAX;
-	}
-	print_vector(x, len, "x");
-	print_vector(y, len, "y");
-
-	double r = cblas_ddot(len, x, 1, y, 1);
-	double ir = iblas_dot(len, x, y);
-	double dr = cblas_ddot(len, x, 1, y, 1);
-	printf("r:  %.17f\n", r);
-	printf("ir: %.17f\n", ir);
-	printf("dr: %.17f\n", dr);
-	printf("nr: %.17f\n", idot(len, x, y));
-
-	float *x_s = (float *) malloc(sizeof(float) * len);
-	float *y_s = (float *) malloc(sizeof(float) * len);
-	for (int i = 0; i < len; ++i) {
-		x_s[i] = x[i];
-		y_s[i] = y[i];
-	}
-
-	printf("rs: %.17f\n", cblas_sdot(len, x_s, 1, y_s, 1));
-	printf("is: %.17f\n", iblas_dot(len, x_s, y_s));
-	printf("ds: %.17f\n", cblas_sdot(len, x_s, 1, y_s, 1));
-	printf("ns: %.17f\n", idot(len, x_s, y_s));
-
-
-	free(y_s);
-	free(x_s);
-	free(y);
-	free(x);
-}
 
 void intput(int n, long double *x, long double *y)
 {
+	srand(time(0));
+	for (int i = 0; i < n; ++i) {
+		x[i] = (long double) rand()/RAND_MAX;
+		y[i] = (long double) rand()/RAND_MAX;
+	}
 }
 
-void single_dot(int n, long double *x, long double *y)
+long double kahan_dot(int n, long double *x, long double *y)
 {
+	long double sum = 0.0;
+	long double c = 0.0;
+
+	for (int i = 0; i < n; ++i) {
+		long double r = x[i] * y[i] - c;
+		long double t = sum + r;
+		c = (t - sum) - r;
+		sum = t;
+	}
+
+	return sum;
 }
 
 int main(int argc, char *argv[])
 {
-	test();
-	long double *x = (long double *) malloc(sizeof(long double) * len);
-	long double *y = (long double *) malloc(sizeof(long double) * len);
+	//test();
+	int n = 10;
+	for (int i = 0; i < 7; ++i) {
+		n *= 10;
+		long double *x = (long double *) malloc(sizeof(long double) * n);
+		long double *y = (long double *) malloc(sizeof(long double) * n);
+		long double abs_error = 0.0;
+		long double rel_error = 0.0;
+		double run_time = 0.0;
 
-	// Input vector x and vector y.
+		// Input vector x and vector y.
+		intput(n, x, y);
+		float *x_single = (float *) malloc(n * sizeof(float));
+		float *y_single = (float *) malloc(n * sizeof(float));
+#pragma omp parallel for num_threads(64)
+		for (int i = 0; i < n; ++i) {
+			x_single[i] = x[i];
+			y_single[i] = y[i];
+		}
 
-	// Caldulate
+		// Calculate the base value
+		long double r = kahan_dot(n, x, y);
 
-	free(x);
-	free(y);
+		// Calculate the output value
+		double start_time = omp_get_wtime();
+		float r_bar = idot(n, x_single, y_single);
+		run_time += omp_get_wtime() - start_time;
+
+		// Absolute error
+		abs_error += r > r_bar ? r - r_bar : r_bar - r;
+
+		// Relative error
+		rel_error += abs_error/r;
+
+		printf("%d %.20Lf %.20Lf %f\n", n, abs_error, rel_error, run_time);
+
+		free(x_single);
+		free(y_single);
+		free(x);
+		free(y);
+	}
 
 	return 0;
 }

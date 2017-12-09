@@ -84,37 +84,44 @@ long double kahan_dot(int n, long double *x, long double *y)
 	return sum;
 }
 
+void test()
+{
+	int n = 10E8;
+	printf("n: %d\n", n);
+	exit(1);
+}
+
 int main(int argc, char *argv[])
 {
 	//test();
-	int count = 2;
+	//int n = 10E8;
+	int n = 1E8;
+	long double *x = (long double *) malloc(sizeof(long double) * n);
+	long double *y = (long double *) malloc(sizeof(long double) * n);
+	// Input vector x and vector y.
+	intput(n, x, y);
+	double *x_double = (double *) malloc(n * sizeof(double));
+	double *y_double = (double *) malloc(n * sizeof(double));
+#pragma omp parallel for num_threads(64)
+	for (int i = 0; i < n; ++i) {
+		x_double[i] = x[i];
+		y_double[i] = y[i];
+	}
 
-	NUM_THREADS = 64;
-	omp_set_num_threads(NUM_THREADS);
-		int n = 10;
-	for (int i = 0; i < 7; ++i) {
-		n *= 10;
+	// Calculate the base value
+	long double r = kahan_dot(n, x, y);
+
+	for (int i = 1; i < 65; i *= 2) {
+		NUM_THREADS = i;
+		omp_set_num_threads(NUM_THREADS);
+	//for (int i = 0; i < 7; ++i) {
+	
 		long double abs_error = 0.0;
 		long double rel_error = 0.0;
 		double run_time = 0.0;
-		//for (int k = 0; k < count; ++k) {
-		long double *x = (long double *) malloc(sizeof(long double) * n);
-		long double *y = (long double *) malloc(sizeof(long double) * n);
 
-		// Input vector x and vector y.
-		intput(n, x, y);
-		double *x_double = (double *) malloc(n * sizeof(double));
-		double *y_double = (double *) malloc(n * sizeof(double));
-#pragma omp parallel for num_threads(64)
-		for (int i = 0; i < n; ++i) {
-			x_double[i] = x[i];
-			y_double[i] = y[i];
-		}
-
-		// Calculate the base value
-		long double r = kahan_dot(n, x, y);
-
-		// Calculate the output value
+		//for (int k = 0; k < count; ++k) { // times of experiments
+			// Calculate the output value
 		double start_time = omp_get_wtime();
 		double r_bar = idot(n, x_double, y_double);
 		run_time += omp_get_wtime() - start_time;
@@ -124,17 +131,19 @@ int main(int argc, char *argv[])
 
 		// Relative error
 		rel_error += abs_error/r;
-
-		printf("%d %.20Lf %.20Lf %f\n", n, abs_error, rel_error, run_time);
-		free(x_double);
-		free(y_double);
-		free(x);
-		free(y);
 		//}
-		//run_time /= count;
 		//abs_error /= count;
 		//rel_error /= count;
+		//run_time /= count;
+
+		printf("%d %.20Lf %.20Lf %f\n", NUM_THREADS, abs_error, rel_error, run_time);
+
+	//}
 	}
+	free(x_double);
+	free(y_double);
+	free(x);
+	free(y);
 
 	return 0;
 }

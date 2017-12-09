@@ -142,32 +142,32 @@ int main(int argc, char *argv[])
 
 		// Input vector x and vector y.
 		intput(n, x, y);
+		double *x_double = (double *) malloc(n * sizeof(double));
+		double *y_double = (double *) malloc(n * sizeof(double));
+#pragma omp parallel for num_threads(64)
+		for (int i = 0; i < n; ++i) {
+			x_double[i] = x[i];
+			y_double[i] = y[i];
+		}
 
-		//for (int k = 0; k < count; ++k) { // times of experiments
-			// Calculate the base value
-			long double r = kahan_dot(n, x, y);
+		// Calculate the base value
+		long double r = kahan_dot(n, x, y);
 
-			// Calculate the output value
-			double start_time = omp_get_wtime();
-			double r_bar = idot(n, x, y);
-			run_time += omp_get_wtime() - start_time;
+		// Calculate the output value
+		double start_time = omp_get_wtime();
+		double r_bar = idot(n, x_double, y_double);
+		run_time += omp_get_wtime() - start_time;
 
-			// Absolute error
-			abs_error += r > r_bar ? r - r_bar : r_bar - r;
+		// Absolute error
+		abs_error += r > r_bar ? r - r_bar : r_bar - r;
 
-			// Relative error
-			rel_error += abs_error/r;
-		//}
-		//abs_error /= count;
-		//rel_error /= count;
-		//run_time /= count;
+		// Relative error
+		rel_error += abs_error/r;
 
-		//print_vector(x, n, "x");
-		//print_vector(y, n, "y");
-		//printf("r: %.20Lf, r_bar: %.20f\n", r, r_bar);
-		//printf("n: %d, abs_error: %.20Lf, rel_error: %.20Lf, time: %f\n", n, abs_error, rel_error);
 		printf("%d %.20Lf %.20Lf %f\n", n, abs_error, rel_error, run_time);
 
+		free(x_double);
+		free(y_double);
 		free(x);
 		free(y);
 	}

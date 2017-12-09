@@ -87,28 +87,27 @@ long double kahan_dot(int n, long double *x, long double *y)
 int main(int argc, char *argv[])
 {
 	//test();
-	int count = 2;
+	int n = 10;
+	int count = 10;
 
 	NUM_THREADS = 64;
 	omp_set_num_threads(NUM_THREADS);
-		int n = 10;
 	for (int i = 0; i < 7; ++i) {
 		n *= 10;
+		long double *x = (long double *) malloc(sizeof(long double) * n);
+		long double *y = (long double *) malloc(sizeof(long double) * n);
 		long double abs_error = 0.0;
 		long double rel_error = 0.0;
 		double run_time = 0.0;
-		//for (int k = 0; k < count; ++k) {
-		long double *x = (long double *) malloc(sizeof(long double) * n);
-		long double *y = (long double *) malloc(sizeof(long double) * n);
 
 		// Input vector x and vector y.
 		intput(n, x, y);
-		double *x_double = (double *) malloc(n * sizeof(double));
-		double *y_double = (double *) malloc(n * sizeof(double));
+		float *x_single = (float *) malloc(n * sizeof(float));
+		float *y_single = (float *) malloc(n * sizeof(float));
 #pragma omp parallel for num_threads(64)
 		for (int i = 0; i < n; ++i) {
-			x_double[i] = x[i];
-			y_double[i] = y[i];
+			x_single[i] = x[i];
+			y_single[i] = y[i];
 		}
 
 		// Calculate the base value
@@ -116,7 +115,7 @@ int main(int argc, char *argv[])
 
 		// Calculate the output value
 		double start_time = omp_get_wtime();
-		double r_bar = idot(n, x_double, y_double);
+		float r_bar = idot(n, x_single, y_single);
 		run_time += omp_get_wtime() - start_time;
 
 		// Absolute error
@@ -126,14 +125,11 @@ int main(int argc, char *argv[])
 		rel_error += abs_error/r;
 
 		printf("%d %.20Lf %.20Lf %f\n", n, abs_error, rel_error, run_time);
-		free(x_double);
-		free(y_double);
+
+		free(x_single);
+		free(y_single);
 		free(x);
 		free(y);
-		//}
-		//run_time /= count;
-		//abs_error /= count;
-		//rel_error /= count;
 	}
 
 	return 0;

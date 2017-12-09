@@ -121,11 +121,15 @@ void test()
 int main(int argc, char *argv[])
 {
 	//test();
-	int n = 10;
 	int count = 10;
 
 	NUM_THREADS = 64;
 	omp_set_num_threads(NUM_THREADS);
+	long double abs_error = 0.0;
+	long double rel_error = 0.0;
+	double run_time = 0.0;
+	//for (int k = 0; k < count; ++k) {
+	int n = 10;
 	for (int i = 0; i < 7; ++i) {
 		n *= 10;
 		long double *x = (long double *) malloc(sizeof(long double) * n);
@@ -146,21 +150,21 @@ int main(int argc, char *argv[])
 		// Calculate the output value
 		double start_time = omp_get_wtime();
 		double r_bar = idot(n, x_double, y_double);
-		double run_time = omp_get_wtime() - start_time;
+		run_time += omp_get_wtime() - start_time;
 
 		// Absolute error
-		long double abs_error = r > r_bar ? r - r_bar : r_bar - r;
+		abs_error += r > r_bar ? r - r_bar : r_bar - r;
 
 		// Relative error
-		long double rel_error = abs_error/r;
+		rel_error += abs_error/r;
 
 		printf("%d %.20Lf %.20Lf %f\n", n, abs_error, rel_error, run_time);
-
 		_mm_free(x_double);
 		_mm_free(y_double);
 		free(x);
 		free(y);
 	}
+	//}
 
 	return 0;
 }
